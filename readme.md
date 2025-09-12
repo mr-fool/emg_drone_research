@@ -55,10 +55,11 @@ Right Arm EMG Sensor Placement:
 ```
 
 ### Channel Mapping
-- **A0 (Left/Right)**: Forearm flexor muscles - Wrist flexion → Horizontal crosshair movement
-- **A1 (Up/Down)**: Forearm extensor muscles - Wrist extension → Vertical crosshair movement  
-- **A2 (Top)**: Bicep brachii - Elbow flexion → Crosshair size change
-- **A3 (Bottom)**: Tricep brachii - Elbow extension → Crosshair rotation
+
+- **A0 (Left/Right)**: Forearm flexor - When you flex your wrist (bend it down toward your palm), this could move the crosshair left or right
+- **A1 (Up/Down)**: Forearm extensor - When you extend your wrist (bend it back up), this could move the crosshair up or down
+- **A2 (Top)**: When you flex your bicep (bend your elbow), this triggers the "top" function
+- **A3 (Bottom)**: Tricep - When you extend your arm (straighten your elbow), this triggers the "bottom" function
 
 ## Installation
 
