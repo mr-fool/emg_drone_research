@@ -203,7 +203,34 @@ class SimplifiedEMGDemo:
             left_right = -0.5 if keys[pygame.K_a] else (0.5 if keys[pygame.K_d] else 0.0)
             up_down = -0.5 if keys[pygame.K_s] else (0.5 if keys[pygame.K_w] else 0.0)
             return left_right, up_down
-            
+    
+    def draw_background(self):
+        """Draw sky and ground gradient background"""
+        # Define colors if not already defined
+        SKY_BLUE = (135, 206, 235)
+        GROUND_GREEN = (34, 139, 34)
+        
+        # Draw sky (top half)
+        for y in range(self.HEIGHT // 2):
+            intensity = 1.0 - (y / (self.HEIGHT // 2)) * 0.3
+            color = (
+                int(SKY_BLUE[0] * intensity),
+                int(SKY_BLUE[1] * intensity), 
+                int(SKY_BLUE[2] * intensity)
+            )
+            pygame.draw.line(self.screen, color, (0, y), (self.WIDTH, y))
+        
+        # Draw ground (bottom half)
+        for y in range(self.HEIGHT // 2, self.HEIGHT):
+            progress = (y - self.HEIGHT // 2) / (self.HEIGHT // 2)
+            intensity = 0.7 + (progress * 0.3)
+            color = (
+                int(GROUND_GREEN[0] * intensity),
+                int(GROUND_GREEN[1] * intensity),
+                int(GROUND_GREEN[2] * intensity)
+            )
+            pygame.draw.line(self.screen, color, (0, y), (self.WIDTH, y))
+
     def update_crosshair_position(self):
         """Update crosshair position based on EMG controls"""
         left_right, up_down = self.get_controls()
@@ -337,7 +364,7 @@ class SimplifiedEMGDemo:
     def draw_hardware_status(self):
         """Draw hardware and signal quality information"""
         status_x = self.WIDTH - 250
-        status_y = 50
+        status_y = 100
         
         # Status panel
         panel_rect = pygame.Rect(status_x - 10, status_y - 10, 240, 180)
@@ -445,7 +472,7 @@ class SimplifiedEMGDemo:
             self.update_crosshair_position()
             
             # Render everything
-            self.screen.fill(self.BLACK)
+            self.draw_background()  # Draw gradient background instead of solid black
             self.draw_crosshair()
             self.draw_control_display()
             self.draw_hardware_status()
