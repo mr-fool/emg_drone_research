@@ -7,21 +7,38 @@ import serial
 import threading
 from collections import deque
 
-class IntegratedEMGDemo:
-    """EMG control demonstration integrated with Arduino BioAmp system"""
+class SimplifiedEMGDemo:
+    """Simplified EMG crosshair control for HardwareX proof-of-concept"""
     
+    def setup_debug_logging(self):
+        """Setup comprehensive debug logging"""
+        self.debug_file = open(f"data_output/debug_log_{self.session_id}.txt", 'w')
+        self.debug_file.write("=== EMG Crosshair Control Debug Log ===\n")
+        self.debug_file.write(f"Session ID: {self.session_id}\n")
+        self.debug_file.write(f"Start Time: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+        self.debug_file.write("=" * 50 + "\n\n")
+        
+    def log_debug_info(self, event_type, message):
+        """Log debug information with timestamp"""
+        if hasattr(self, 'debug_file'):
+            timestamp = time.time() - self.start_time
+            debug_line = f"[{timestamp:8.3f}s] {event_type:12} | {message}\n"
+            self.debug_file.write(debug_line)
+            self.debug_file.flush()
+            print(f"DEBUG: {debug_line.strip()}")
+
     def __init__(self):
         pygame.init()
         self.WIDTH, self.HEIGHT = 1000, 700
         self.screen = pygame.display.set_mode((self.WIDTH, self.HEIGHT))
-        pygame.display.set_caption("EMG Control Research Platform - HardwareX")
+        pygame.display.set_caption("EMG Crosshair Control - HardwareX Research")
         
         # Colors
         self.WHITE = (255, 255, 255)
         self.BLACK = (0, 0, 0)
-        self.BLUE = (0, 100, 255)
-        self.RED = (255, 0, 0)
         self.GREEN = (0, 255, 0)
+        self.RED = (255, 0, 0)
+        self.BLUE = (0, 150, 255)
         self.YELLOW = (255, 255, 0)
         self.GRAY = (128, 128, 128)
         
@@ -39,113 +56,131 @@ class IntegratedEMGDemo:
         self.max_values = [100.0, 100.0, 100.0, 100.0]
         self.calibrated = False
         
-        # Control processing
-        self.control_history = deque(maxlen=300)  # 5 seconds at 60 FPS
-        self.signal_quality = "Unknown"
-        
-        # Drone representation
-        self.drone_x = self.WIDTH // 2
-        self.drone_y = self.HEIGHT // 2
-        self.drone_z = 0
-        self.drone_roll = 0
-        self.drone_size = 50
+        # Crosshair position and tracking
+        self.crosshair_x = self.WIDTH // 2
+        self.crosshair_y = self.HEIGHT // 2
+        self.crosshair_size = 20
+        self.crosshair_rotation = 0.0
+        self.target_positions = deque(maxlen=100)  # For accuracy tracking
         
         # Movement constraints
-        self.movement_bounds = {
-            'x_min': 100, 'x_max': self.WIDTH - 100,
-            'y_min': 100, 'y_max': self.HEIGHT - 200,
-            'z_min': -50, 'z_max': 50
+        self.crosshair_bounds = {
+            'x_min': 50, 'x_max': self.WIDTH - 50,
+            'y_min': 50, 'y_max': self.HEIGHT - 50
         }
+        
+        # Control processing
+        self.control_history = deque(maxlen=300)
+        self.signal_quality = "Unknown"
         
         # Hardware validation metrics
         self.start_time = time.time()
         self.last_emg_time = time.time()
-        self.control_latency = 0.0
         self.acquisition_rate = 0.0
         self.frame_count = 0
+        self.position_accuracy = 0.0
         
         # Data logging
         self.session_id = time.strftime("%Y%m%d_%H%M%S")
         self.setup_logging()
+        self.setup_debug_logging()
         self.setup_arduino()
         
     def setup_arduino(self):
-        """Setup Arduino connection"""
+        """Setup Arduino connection with debug logging"""
         arduino_ports = ['COM3', 'COM4', 'COM5', '/dev/ttyUSB0', '/dev/ttyACM0']
+        
+        self.log_debug_info("INIT", "Starting Arduino connection attempt")
         
         for port in arduino_ports:
             try:
+                self.log_debug_info("ARDUINO", f"Attempting connection on {port}")
                 self.ser = serial.Serial(port, 115200, timeout=0.1)
-                time.sleep(2)  # Arduino reset time
+                time.sleep(2)
                 self.arduino_connected = True
-                print(f"Arduino connected on {port}")
+                self.log_debug_info("ARDUINO", f"Successfully connected on {port}")
                 
-                # Start EMG reading thread
                 self.emg_thread = threading.Thread(target=self.read_emg_data, daemon=True)
                 self.emg_thread.start()
+                self.log_debug_info("THREAD", "EMG reading thread started")
                 break
                 
-            except (serial.SerialException, FileNotFoundError):
+            except (serial.SerialException, FileNotFoundError) as e:
+                self.log_debug_info("ARDUINO", f"Failed to connect on {port}: {e}")
                 continue
                 
         if not self.arduino_connected:
-            print("Arduino not found. Using keyboard controls.")
+            self.log_debug_info("ARDUINO", "No Arduino found - using keyboard mode")
             
     def read_emg_data(self):
-        """Read EMG data from Arduino in separate thread"""
+        """Read EMG data from Arduino with debug logging"""
+        self.log_debug_info("EMG", "Starting EMG data reading loop")
+        emg_packet_count = 0
+        
         while self.arduino_connected:
             try:
                 if self.ser.in_waiting > 0:
                     line = self.ser.readline().decode('utf-8').strip()
                     
                     if line.startswith('EMG,'):
-                        # Parse: EMG,timestamp,throttle,yaw,pitch,roll,baseline_data...
+                        emg_packet_count += 1
                         parts = line.split(',')
                         if len(parts) >= 6:
                             self.raw_emg = [float(parts[2]), float(parts[3]), 
-                                          float(parts[4]), float(parts[5])]
+                                        float(parts[4]), float(parts[5])]
                             self.last_emg_time = time.time()
                             self.process_emg_signals()
                             
+                            if emg_packet_count % 100 == 0:
+                                self.log_debug_info("EMG", f"Processed {emg_packet_count} EMG packets. Latest: {self.raw_emg}")
+                        else:
+                            self.log_debug_info("EMG_ERROR", f"Invalid EMG packet format: {line}")
+                            
                     elif line.startswith('QUALITY,'):
-                        # Parse signal quality data
                         parts = line.split(',')
                         if len(parts) >= 6:
                             self.signal_quality = parts[5]
+                            self.log_debug_info("QUALITY", f"Signal quality updated: {self.signal_quality}")
                             
                     elif line.startswith('CALIBRATION_COMPLETE'):
                         self.calibrated = True
-                        print("EMG calibration completed")
+                        self.log_debug_info("CALIBRATION", "EMG calibration completed successfully")
+                        
+                    elif line.strip():
+                        self.log_debug_info("ARDUINO_MSG", f"Unknown message: {line}")
                         
             except Exception as e:
-                print(f"EMG read error: {e}")
+                self.log_debug_info("EMG_ERROR", f"Error reading EMG data: {e}")
                 time.sleep(0.1)
                 
     def process_emg_signals(self):
-        """Process raw EMG into control signals"""
+        """Process raw EMG into control signals with debug logging"""
         processed = [0.0, 0.0, 0.0, 0.0]
         
         for i in range(4):
-            # Simple baseline subtraction and normalization
             if self.calibrated:
                 baseline_corrected = max(0, self.raw_emg[i] - self.baseline[i])
                 range_val = self.max_values[i] - self.baseline[i]
                 if range_val > 0:
                     processed[i] = min(1.0, baseline_corrected / range_val)
             else:
-                # Basic thresholding during calibration
                 processed[i] = max(0, min(1.0, (self.raw_emg[i] - 20) / 80))
         
+        # Log significant control changes
+        old_emg = getattr(self, 'emg_data', [0, 0, 0, 0])
+        max_change = max(abs(processed[i] - old_emg[i]) for i in range(4))
+        
+        if max_change > 0.2:
+            self.log_debug_info("CONTROL", f"Significant control change: {old_emg} -> {processed}")
+        
         self.emg_data = processed
-        
-        # Calculate metrics
         self.calculate_acquisition_rate()
-        
+            
     def calculate_acquisition_rate(self):
         """Calculate EMG signal acquisition rate"""
         current_time = time.time()
         self.control_history.append(current_time)
-        
+            
         if len(self.control_history) > 10:
             time_span = current_time - self.control_history[0]
             self.acquisition_rate = len(self.control_history) / time_span
@@ -154,12 +189,11 @@ class IntegratedEMGDemo:
         """Setup comprehensive data logging"""
         os.makedirs("data_output", exist_ok=True)
         
-        # Main data log
-        self.log_file = open(f"data_output/emg_validation_{self.session_id}.csv", 'w', newline='')
+        self.log_file = open(f"data_output/emg_crosshair_{self.session_id}.csv", 'w', newline='')
         writer = csv.writer(self.log_file)
         writer.writerow(['timestamp', 'throttle_raw', 'yaw_raw', 'pitch_raw', 'roll_raw',
                         'throttle_processed', 'yaw_processed', 'pitch_processed', 'roll_processed',
-                        'drone_x', 'drone_y', 'drone_z', 'signal_quality', 'acquisition_rate'])
+                        'crosshair_x', 'crosshair_y', 'crosshair_rotation', 'signal_quality', 'acquisition_rate'])
         
     def get_controls(self):
         """Get control inputs from EMG or keyboard fallback"""
@@ -174,68 +208,121 @@ class IntegratedEMGDemo:
             roll = -0.5 if keys[pygame.K_q] else (0.5 if keys[pygame.K_e] else 0.0)
             return throttle, yaw, pitch, roll
             
-    def update_drone_position(self):
-        """Update drone position based on controls"""
+    def update_crosshair_position(self):
+        """Update crosshair position based on EMG controls"""
         throttle, yaw, pitch, roll = self.get_controls()
         
-        # Movement parameters
-        speed = 2.0
+        # Store old position for movement tracking
+        old_pos = (self.crosshair_x, self.crosshair_y)
         
-        # Vertical movement (throttle)
-        if throttle > 0.1:
-            self.drone_y -= speed * throttle
-        else:
-            self.drone_y += speed * 0.3  # Gentle descent
+        # Movement sensitivity
+        sensitivity = 3.0
+        
+        # Update crosshair position
+        # Throttle: Up/Down movement (inverted Y axis)
+        if abs(throttle) > 0.05:
+            self.crosshair_y -= throttle * sensitivity
+        
+        # Yaw: Left/Right movement
+        if abs(yaw) > 0.05:
+            self.crosshair_x += yaw * sensitivity
             
-        # Horizontal movement (yaw)
-        self.drone_x += yaw * speed
+        # Pitch: Size change for forward/back indication
+        if abs(pitch) > 0.05:
+            self.crosshair_size = 20 + int(pitch * 15)
+        else:
+            self.crosshair_size = 20
+            
+        # Roll: Rotation
+        if abs(roll) > 0.05:
+            self.crosshair_rotation = roll * 45  # Max 45 degree rotation
+        else:
+            self.crosshair_rotation *= 0.9  # Gradual return to center
         
-        # Depth movement (pitch)
-        self.drone_z += pitch * speed
+        # Apply position constraints
+        self.crosshair_x = max(self.crosshair_bounds['x_min'], 
+                              min(self.crosshair_bounds['x_max'], self.crosshair_x))
+        self.crosshair_y = max(self.crosshair_bounds['y_min'], 
+                              min(self.crosshair_bounds['y_max'], self.crosshair_y))
         
-        # Roll for visual effect
-        self.drone_roll = roll * 25
+        # Clamp size
+        self.crosshair_size = max(10, min(40, self.crosshair_size))
         
-        # Apply movement constraints
-        self.drone_x = max(self.movement_bounds['x_min'], 
-                          min(self.movement_bounds['x_max'], self.drone_x))
-        self.drone_y = max(self.movement_bounds['y_min'], 
-                          min(self.movement_bounds['y_max'], self.drone_y))
-        self.drone_z = max(self.movement_bounds['z_min'], 
-                          min(self.movement_bounds['z_max'], self.drone_z))
+        # Log significant movements
+        new_pos = (self.crosshair_x, self.crosshair_y)
+        movement_distance = ((new_pos[0] - old_pos[0])**2 + (new_pos[1] - old_pos[1])**2)**0.5
         
-    def draw_drone(self):
-        """Draw drone with 3D perspective effect"""
-        # Calculate size based on Z position
-        size_factor = 1.0 + (self.drone_z * 0.02)
-        current_size = int(self.drone_size * size_factor)
+        if movement_distance > 5:
+            self.log_debug_info("MOVEMENT", f"Crosshair moved {movement_distance:.1f} pixels to {new_pos}")
         
-        # Main body (rotated square)
-        body_points = []
-        for i in range(4):
-            angle = (i * 90) + self.drone_roll
-            x = self.drone_x + math.cos(math.radians(angle)) * current_size / 2
-            y = self.drone_y + math.sin(math.radians(angle)) * current_size / 2
-            body_points.append((x, y))
+    def draw_crosshair(self):
+        """Draw EMG-controlled crosshair"""
+        x, y = int(self.crosshair_x), int(self.crosshair_y)
+        size = int(self.crosshair_size)
         
-        pygame.draw.polygon(self.screen, self.BLUE, body_points)
-        pygame.draw.polygon(self.screen, self.WHITE, body_points, 3)
+        # Determine color based on control activity
+        throttle, yaw, pitch, roll = self.get_controls()
+        activity_level = sum(abs(val) for val in [throttle, yaw, pitch, roll])
         
-        # Propellers
-        prop_size = max(8, current_size // 4)
-        for i in range(4):
-            angle = i * 90
-            prop_x = self.drone_x + math.cos(math.radians(angle)) * current_size * 0.6
-            prop_y = self.drone_y + math.sin(math.radians(angle)) * current_size * 0.6
-            pygame.draw.circle(self.screen, self.RED, (int(prop_x), int(prop_y)), prop_size)
+        if activity_level > 0.5:
+            color = self.RED  # High activity
+        elif activity_level > 0.2:
+            color = self.YELLOW  # Medium activity
+        else:
+            color = self.GREEN  # Low/no activity
         
-        # Center marker
-        pygame.draw.circle(self.screen, self.YELLOW, (int(self.drone_x), int(self.drone_y)), 6)
+        # Draw rotated crosshair if roll is active
+        if abs(self.crosshair_rotation) > 1:
+            angle_rad = math.radians(self.crosshair_rotation)
+            
+            # Calculate rotated line endpoints
+            cos_a, sin_a = math.cos(angle_rad), math.sin(angle_rad)
+            
+            # Horizontal line (rotated)
+            h_start = (x - size * cos_a, y - size * sin_a)
+            h_end = (x + size * cos_a, y + size * sin_a)
+            
+            # Vertical line (rotated)
+            v_start = (x + size * sin_a, y - size * cos_a)
+            v_end = (x - size * sin_a, y + size * cos_a)
+            
+            pygame.draw.line(self.screen, color, h_start, h_end, 3)
+            pygame.draw.line(self.screen, color, v_start, v_end, 3)
+        else:
+            # Standard crosshair
+            pygame.draw.line(self.screen, color, 
+                            (x - size, y), (x + size, y), 3)
+            pygame.draw.line(self.screen, color,
+                            (x, y - size), (x, y + size), 3)
         
-        # Z-position indicator (shadow)
-        shadow_offset = int(self.drone_z * 0.5)
-        shadow_pos = (int(self.drone_x + shadow_offset), int(self.drone_y + shadow_offset))
-        pygame.draw.circle(self.screen, self.GRAY, shadow_pos, current_size // 3)
+        # Center dot
+        pygame.draw.circle(self.screen, color, (x, y), 5)
+        
+        # Corner brackets for targeting assistance
+        bracket_size = 8
+        bracket_distance = size + 15
+        
+        corners = [
+            (x - bracket_distance, y - bracket_distance),
+            (x + bracket_distance, y - bracket_distance),
+            (x - bracket_distance, y + bracket_distance),
+            (x + bracket_distance, y + bracket_distance)
+        ]
+        
+        for i, (corner_x, corner_y) in enumerate(corners):
+            corner_x, corner_y = int(corner_x), int(corner_y)
+            if i == 0:  # Top-left
+                pygame.draw.line(self.screen, color, (corner_x, corner_y), (corner_x + bracket_size, corner_y), 2)
+                pygame.draw.line(self.screen, color, (corner_x, corner_y), (corner_x, corner_y + bracket_size), 2)
+            elif i == 1:  # Top-right
+                pygame.draw.line(self.screen, color, (corner_x, corner_y), (corner_x - bracket_size, corner_y), 2)
+                pygame.draw.line(self.screen, color, (corner_x, corner_y), (corner_x, corner_y + bracket_size), 2)
+            elif i == 2:  # Bottom-left
+                pygame.draw.line(self.screen, color, (corner_x, corner_y), (corner_x + bracket_size, corner_y), 2)
+                pygame.draw.line(self.screen, color, (corner_x, corner_y), (corner_x, corner_y - bracket_size), 2)
+            elif i == 3:  # Bottom-right
+                pygame.draw.line(self.screen, color, (corner_x, corner_y), (corner_x - bracket_size, corner_y), 2)
+                pygame.draw.line(self.screen, color, (corner_x, corner_y), (corner_x, corner_y - bracket_size), 2)
         
     def draw_control_display(self):
         """Draw real-time control input visualization"""
@@ -248,7 +335,7 @@ class IntegratedEMGDemo:
         
         # Background panel
         panel_rect = pygame.Rect(panel_x - 10, panel_y - 10, 200, 200)
-        pygame.draw.rect(self.screen, (0, 0, 0, 128), panel_rect)
+        pygame.draw.rect(self.screen, (0, 0, 0, 180), panel_rect)
         pygame.draw.rect(self.screen, self.WHITE, panel_rect, 2)
         
         # Title
@@ -256,10 +343,10 @@ class IntegratedEMGDemo:
         self.screen.blit(title, (panel_x, panel_y - 30))
         
         controls = [
-            ("Throttle", throttle, self.GREEN),
-            ("Yaw", yaw, self.RED),
-            ("Pitch", pitch, self.BLUE),
-            ("Roll", roll, self.YELLOW)
+            ("Throttle (↕)", throttle, self.GREEN),
+            ("Yaw (↔)", yaw, self.RED),
+            ("Pitch (⌀)", pitch, self.BLUE),
+            ("Roll (↻)", roll, self.YELLOW)
         ]
         
         for i, (name, value, color) in enumerate(controls):
@@ -292,8 +379,8 @@ class IntegratedEMGDemo:
         status_y = 50
         
         # Status panel
-        panel_rect = pygame.Rect(status_x - 10, status_y - 10, 240, 150)
-        pygame.draw.rect(self.screen, (0, 0, 0, 128), panel_rect)
+        panel_rect = pygame.Rect(status_x - 10, status_y - 10, 240, 180)
+        pygame.draw.rect(self.screen, (0, 0, 0, 180), panel_rect)
         pygame.draw.rect(self.screen, self.WHITE, panel_rect, 2)
         
         # Title
@@ -321,25 +408,29 @@ class IntegratedEMGDemo:
         rate_display = self.font_small.render(f"Rate: {self.acquisition_rate:.1f} Hz", True, self.WHITE)
         self.screen.blit(rate_display, (status_x, status_y + 75))
         
+        # Crosshair position
+        pos_display = self.font_small.render(f"Position: ({self.crosshair_x:.0f}, {self.crosshair_y:.0f})", True, self.WHITE)
+        self.screen.blit(pos_display, (status_x, status_y + 100))
+        
         # Session time
         session_time = time.time() - self.start_time
         time_display = self.font_small.render(f"Time: {session_time:.1f}s", True, self.WHITE)
-        self.screen.blit(time_display, (status_x, status_y + 100))
+        self.screen.blit(time_display, (status_x, status_y + 125))
         
     def draw_instructions(self):
         """Draw control instructions and research information"""
         info_y = self.HEIGHT - 100
         
         # Main title
-        title = self.font_large.render("EMG Flight Control Research Platform", True, self.WHITE)
+        title = self.font_large.render("EMG Crosshair Control - HardwareX Research", True, self.WHITE)
         title_rect = title.get_rect(center=(self.WIDTH // 2, 30))
         self.screen.blit(title, title_rect)
         
         # Instructions
         instructions = [
-            "Hardware: BioAmp EXG Pill + Arduino Uno R4 | Publication: HardwareX",
-            "EMG Mapping: Forearm Flexor→Throttle | Forearm Extensor→Yaw | Bicep→Pitch | Tricep→Roll",
-            "Keyboard Fallback: WASD=Pitch/Yaw | Space=Throttle | QE=Roll | ESC=Exit"
+            "Hardware: BioAmp EXG Pill + Arduino Uno R4 | EMG Signal → Crosshair Movement",
+            "EMG Mapping: Flexor→Up | Extensor→Down | Yaw→Left/Right | Pitch→Size | Roll→Rotation",
+            "Keyboard Fallback: WASD=Movement | Space=Up | QE=Roll | R=Reset | ESC=Exit"
         ]
         
         for i, instruction in enumerate(instructions):
@@ -358,7 +449,7 @@ class IntegratedEMGDemo:
                 timestamp, 
                 self.raw_emg[0], self.raw_emg[1], self.raw_emg[2], self.raw_emg[3],
                 throttle, yaw, pitch, roll,
-                self.drone_x, self.drone_y, self.drone_z,
+                self.crosshair_x, self.crosshair_y, self.crosshair_rotation,
                 self.signal_quality, self.acquisition_rate
             ])
             self.log_file.flush()
@@ -368,9 +459,9 @@ class IntegratedEMGDemo:
         clock = pygame.time.Clock()
         running = True
         
-        print("=== EMG Flight Control Research Platform ===")
+        print("=== EMG Crosshair Control Research Platform ===")
         print("Hardware: BioAmp EXG Pill + Arduino Uno R4")
-        print("Publication: HardwareX Proof of Concept")
+        print("Research: HardwareX Proof of Concept")
         print("Session ID:", self.session_id)
         print("=" * 50)
         
@@ -378,22 +469,25 @@ class IntegratedEMGDemo:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
+                
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
+                        self.log_debug_info("USER", "User requested exit via ESC key")
                         running = False
                     elif event.key == pygame.K_r:
-                        # Reset drone position
-                        self.drone_x = self.WIDTH // 2
-                        self.drone_y = self.HEIGHT // 2
-                        self.drone_z = 0
-                        self.drone_roll = 0
-            
-            # Update drone position
-            self.update_drone_position()
+                        self.log_debug_info("USER", "User reset crosshair position")
+                        # Reset crosshair position
+                        self.crosshair_x = self.WIDTH // 2
+                        self.crosshair_y = self.HEIGHT // 2
+                        self.crosshair_rotation = 0.0
+                        self.crosshair_size = 20
+
+            # Update crosshair position
+            self.update_crosshair_position()
             
             # Render everything
             self.screen.fill(self.BLACK)
-            self.draw_drone()
+            self.draw_crosshair()
             self.draw_control_display()
             self.draw_hardware_status()
             self.draw_instructions()
@@ -410,18 +504,24 @@ class IntegratedEMGDemo:
         self.cleanup()
         
     def cleanup(self):
-        """Cleanup resources"""
+        """Cleanup resources with debug logging"""
+        self.log_debug_info("CLEANUP", "Starting cleanup process")
+        
         if hasattr(self, 'log_file'):
             self.log_file.close()
-            print(f"Data logged to: emg_validation_{self.session_id}.csv")
+            self.log_debug_info("CLEANUP", f"Data logged to: emg_crosshair_{self.session_id}.csv")
             
         if self.arduino_connected and self.ser:
             self.ser.close()
-            print("Arduino connection closed")
+            self.log_debug_info("CLEANUP", "Arduino connection closed")
+            
+        if hasattr(self, 'debug_file'):
+            self.log_debug_info("CLEANUP", "Debug logging session completed")
+            self.debug_file.close()
             
         pygame.quit()
-        print("EMG research session completed")
+        print(f"Debug log saved to: debug_log_{self.session_id}.txt")
 
 if __name__ == "__main__":
-    demo = IntegratedEMGDemo()
+    demo = SimplifiedEMGDemo()
     demo.run()
