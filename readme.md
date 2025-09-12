@@ -6,7 +6,7 @@ A proof-of-concept system demonstrating real-time crosshair/HUD control using el
 
 ## Hardware Components
 
-- **BioAmp EXG Pill** - 4-channel EMG acquisition module
+- **BioAmp EXG Pill** - 4-channel EMG acquisition module (using 2 channels)
 - **Arduino Uno R4** - Signal processing and serial communication
 - **Standard EMG electrodes** - Ag/AgCl surface electrodes
 - **Python application** - Real-time visualization and data logging
@@ -19,10 +19,10 @@ BioAmp EXG Pill    Arduino Uno R4
 ─────────────────  ──────────────
 VCC             →  3.3V
 GND             →  GND
-OUT1            →  A0 (Throttle)
-OUT2            →  A1 (Yaw)
-OUT3            →  A2 (Pitch) 
-OUT4            →  A3 (Roll)
+OUT1            →  A0 (Left/Right)
+OUT2            →  A1 (Up/Down)
+OUT3            →  (Not used)
+OUT4            →  (Not used)
 ```
 
 ## EMG Sensor Placement (Single Arm Configuration)
@@ -32,11 +32,11 @@ Right Arm EMG Sensor Placement:
                                     
     Shoulder                        
         |                           
-        |   [A2] - Bicep Brachii (Top Control)
-        |    ●●                     
+        |                           
+        |                           
     Upper Arm                       
-        |    ●●                     
-        |   [A3] - Tricep Brachii (Bottom Control)
+        |                           
+        |                           
         |                           
     ────┴────                       
      Elbow                          
@@ -55,11 +55,14 @@ Right Arm EMG Sensor Placement:
 ```
 
 ### Channel Mapping
+- **A0 (Left/Right)**: Forearm flexor muscles - Wrist flexion → Horizontal crosshair movement
+- **A1 (Up/Down)**: Forearm extensor muscles - Wrist extension → Vertical crosshair movement
 
-- **A0 (Left/Right)**: Forearm flexor - When you flex your wrist (bend it down toward your palm), this could move the crosshair left or right
-- **A1 (Up/Down)**: Forearm extensor - When you extend your wrist (bend it back up), this could move the crosshair up or down
-- **A2 (Top)**: When you flex your bicep (bend your elbow), this triggers the "top" function
-- **A3 (Bottom)**: Tricep - When you extend your arm (straighten your elbow), this triggers the "bottom" function
+### Muscle Movement Instructions
+For crosshair control, the actual muscle movements are:
+
+- **A0 (Left/Right)**: Forearm flexor - When you flex your wrist (bend it down toward your palm), this moves the crosshair left or right
+- **A1 (Up/Down)**: Forearm extensor - When you extend your wrist (bend it back up), this moves the crosshair up or down
 
 ## Installation
 
@@ -101,7 +104,7 @@ The system will automatically detect the Arduino connection. If no Arduino is fo
 ## Research Features
 
 ### Real-Time Visualization
-- Dynamic crosshair with EMG-controlled movement, size, and rotation
+- Dynamic crosshair with EMG-controlled movement
 - Live EMG signal strength indicators with color-coded activity levels
 - Hardware status and signal quality monitoring
 - Control input visualization with real-time feedback bars
@@ -110,7 +113,7 @@ The system will automatically detect the Arduino connection. If no Arduino is fo
 ### Data Collection
 - Comprehensive CSV logging with timestamp precision
 - Raw EMG values and processed control signals
-- Crosshair position and rotation tracking for accuracy analysis
+- Crosshair position tracking for accuracy analysis
 - Signal quality metrics for hardware validation
 - Session metadata for research reproducibility
 
@@ -134,7 +137,7 @@ This platform validates EMG-based human-machine interfaces for:
 
 ### EMG Processing
 - **Sampling Rate**: 500 Hz per channel
-- **Signal Filtering**: Muscle-specific Butterworth filters (70-190 Hz)
+- **Signal Filtering**: Muscle-specific Butterworth filters (70-160 Hz)
 - **Envelope Detection**: Real-time amplitude demodulation
 - **Adaptive Thresholding**: Dynamic baseline tracking and noise rejection
 
@@ -150,7 +153,7 @@ This platform validates EMG-based human-machine interfaces for:
 Research data is automatically saved to `data_output/emg_crosshair_YYYYMMDD_HHMMSS.csv`:
 
 ```csv
-timestamp,throttle_raw,yaw_raw,pitch_raw,roll_raw,throttle_processed,yaw_processed,pitch_processed,roll_processed,crosshair_x,crosshair_y,crosshair_rotation,signal_quality,acquisition_rate
+timestamp,left_right_raw,up_down_raw,left_right_processed,up_down_processed,crosshair_x,crosshair_y,signal_quality,acquisition_rate
 ```
 
 ## Safety Considerations

@@ -8,7 +8,7 @@ import threading
 from collections import deque
 
 class SimplifiedEMGDemo:
-    """Simplified EMG crosshair control for HardwareX proof-of-concept"""
+    """Simplified 2-channel EMG crosshair control for HardwareX proof-of-concept"""
     
     def setup_debug_logging(self):
         """Setup comprehensive debug logging"""
@@ -47,20 +47,19 @@ class SimplifiedEMGDemo:
         self.font_medium = pygame.font.Font(None, 24)
         self.font_small = pygame.font.Font(None, 18)
         
-        # Arduino/EMG setup
+        # Arduino/EMG setup (2 channels only)
         self.arduino_connected = False
         self.ser = None
-        self.emg_data = [0.0, 0.0, 0.0, 0.0]  # throttle, yaw, pitch, roll
-        self.raw_emg = [0.0, 0.0, 0.0, 0.0]
-        self.baseline = [0.0, 0.0, 0.0, 0.0]
-        self.max_values = [100.0, 100.0, 100.0, 100.0]
+        self.emg_data = [0.0, 0.0]  # left/right, up/down
+        self.raw_emg = [0.0, 0.0]
+        self.baseline = [0.0, 0.0]
+        self.max_values = [100.0, 100.0]
         self.calibrated = False
         
         # Crosshair position and tracking
         self.crosshair_x = self.WIDTH // 2
         self.crosshair_y = self.HEIGHT // 2
-        self.crosshair_size = 20
-        self.crosshair_rotation = 0.0
+        self.crosshair_size = 20  # Fixed size for simplicity
         self.target_positions = deque(maxlen=100)  # For accuracy tracking
         
         # Movement constraints
@@ -125,9 +124,8 @@ class SimplifiedEMGDemo:
                     if line.startswith('EMG,'):
                         emg_packet_count += 1
                         parts = line.split(',')
-                        if len(parts) >= 6:
-                            self.raw_emg = [float(parts[2]), float(parts[3]), 
-                                        float(parts[4]), float(parts[5])]
+                        if len(parts) >= 4:  # Only 2 EMG channels now
+                            self.raw_emg = [float(parts[2]), float(parts[3])]
                             self.last_emg_time = time.time()
                             self.process_emg_signals()
                             
@@ -138,8 +136,8 @@ class SimplifiedEMGDemo:
                             
                     elif line.startswith('QUALITY,'):
                         parts = line.split(',')
-                        if len(parts) >= 6:
-                            self.signal_quality = parts[5]
+                        if len(parts) >= 4:  # 2 channels + quality
+                            self.signal_quality = parts[3]
                             self.log_debug_info("QUALITY", f"Signal quality updated: {self.signal_quality}")
                             
                     elif line.startswith('CALIBRATION_COMPLETE'):
@@ -155,9 +153,9 @@ class SimplifiedEMGDemo:
                 
     def process_emg_signals(self):
         """Process raw EMG into control signals with debug logging"""
-        processed = [0.0, 0.0, 0.0, 0.0]
+        processed = [0.0, 0.0]
         
-        for i in range(4):
+        for i in range(2):  # Only 2 channels
             if self.calibrated:
                 baseline_corrected = max(0, self.raw_emg[i] - self.baseline[i])
                 range_val = self.max_values[i] - self.baseline[i]
@@ -167,8 +165,8 @@ class SimplifiedEMGDemo:
                 processed[i] = max(0, min(1.0, (self.raw_emg[i] - 20) / 80))
         
         # Log significant control changes
-        old_emg = getattr(self, 'emg_data', [0, 0, 0, 0])
-        max_change = max(abs(processed[i] - old_emg[i]) for i in range(4))
+        old_emg = getattr(self, 'emg_data', [0, 0])
+        max_change = max(abs(processed[i] - old_emg[i]) for i in range(2))
         
         if max_change > 0.2:
             self.log_debug_info("CONTROL", f"Significant control change: {old_emg} -> {processed}")
@@ -191,26 +189,24 @@ class SimplifiedEMGDemo:
         
         self.log_file = open(f"data_output/emg_crosshair_{self.session_id}.csv", 'w', newline='')
         writer = csv.writer(self.log_file)
-        writer.writerow(['timestamp', 'throttle_raw', 'yaw_raw', 'pitch_raw', 'roll_raw',
-                        'throttle_processed', 'yaw_processed', 'pitch_processed', 'roll_processed',
-                        'crosshair_x', 'crosshair_y', 'crosshair_rotation', 'signal_quality', 'acquisition_rate'])
+        writer.writerow(['timestamp', 'left_right_raw', 'up_down_raw',
+                        'left_right_processed', 'up_down_processed',
+                        'crosshair_x', 'crosshair_y', 'signal_quality', 'acquisition_rate'])
         
     def get_controls(self):
         """Get control inputs from EMG or keyboard fallback"""
         if self.arduino_connected and self.calibrated:
-            return self.emg_data[0], self.emg_data[1], self.emg_data[2], self.emg_data[3]
+            return self.emg_data[0], self.emg_data[1]
         else:
-            # Keyboard fallback
+            # Simplified keyboard fallback - only WASD
             keys = pygame.key.get_pressed()
-            throttle = 0.7 if keys[pygame.K_SPACE] else 0.0
-            yaw = -0.5 if keys[pygame.K_a] else (0.5 if keys[pygame.K_d] else 0.0)
-            pitch = -0.5 if keys[pygame.K_s] else (0.5 if keys[pygame.K_w] else 0.0)
-            roll = -0.5 if keys[pygame.K_q] else (0.5 if keys[pygame.K_e] else 0.0)
-            return throttle, yaw, pitch, roll
+            left_right = -0.5 if keys[pygame.K_a] else (0.5 if keys[pygame.K_d] else 0.0)
+            up_down = -0.5 if keys[pygame.K_s] else (0.5 if keys[pygame.K_w] else 0.0)
+            return left_right, up_down
             
     def update_crosshair_position(self):
         """Update crosshair position based on EMG controls"""
-        throttle, yaw, pitch, roll = self.get_controls()
+        left_right, up_down = self.get_controls()
         
         # Store old position for movement tracking
         old_pos = (self.crosshair_x, self.crosshair_y)
@@ -219,34 +215,19 @@ class SimplifiedEMGDemo:
         sensitivity = 3.0
         
         # Update crosshair position
-        # Throttle: Up/Down movement (inverted Y axis)
-        if abs(throttle) > 0.05:
-            self.crosshair_y -= throttle * sensitivity
+        # Left/Right movement
+        if abs(left_right) > 0.05:
+            self.crosshair_x += left_right * sensitivity
         
-        # Yaw: Left/Right movement
-        if abs(yaw) > 0.05:
-            self.crosshair_x += yaw * sensitivity
-            
-        # Pitch: Size change for forward/back indication
-        if abs(pitch) > 0.05:
-            self.crosshair_size = 20 + int(pitch * 15)
-        else:
-            self.crosshair_size = 20
-            
-        # Roll: Rotation
-        if abs(roll) > 0.05:
-            self.crosshair_rotation = roll * 45  # Max 45 degree rotation
-        else:
-            self.crosshair_rotation *= 0.9  # Gradual return to center
+        # Up/Down movement (inverted Y axis)
+        if abs(up_down) > 0.05:
+            self.crosshair_y -= up_down * sensitivity
         
         # Apply position constraints
         self.crosshair_x = max(self.crosshair_bounds['x_min'], 
                               min(self.crosshair_bounds['x_max'], self.crosshair_x))
         self.crosshair_y = max(self.crosshair_bounds['y_min'], 
                               min(self.crosshair_bounds['y_max'], self.crosshair_y))
-        
-        # Clamp size
-        self.crosshair_size = max(10, min(40, self.crosshair_size))
         
         # Log significant movements
         new_pos = (self.crosshair_x, self.crosshair_y)
@@ -258,11 +239,11 @@ class SimplifiedEMGDemo:
     def draw_crosshair(self):
         """Draw EMG-controlled crosshair"""
         x, y = int(self.crosshair_x), int(self.crosshair_y)
-        size = int(self.crosshair_size)
+        size = self.crosshair_size
         
         # Determine color based on control activity
-        throttle, yaw, pitch, roll = self.get_controls()
-        activity_level = sum(abs(val) for val in [throttle, yaw, pitch, roll])
+        left_right, up_down = self.get_controls()
+        activity_level = abs(left_right) + abs(up_down)
         
         if activity_level > 0.5:
             color = self.RED  # High activity
@@ -271,29 +252,11 @@ class SimplifiedEMGDemo:
         else:
             color = self.GREEN  # Low/no activity
         
-        # Draw rotated crosshair if roll is active
-        if abs(self.crosshair_rotation) > 1:
-            angle_rad = math.radians(self.crosshair_rotation)
-            
-            # Calculate rotated line endpoints
-            cos_a, sin_a = math.cos(angle_rad), math.sin(angle_rad)
-            
-            # Horizontal line (rotated)
-            h_start = (x - size * cos_a, y - size * sin_a)
-            h_end = (x + size * cos_a, y + size * sin_a)
-            
-            # Vertical line (rotated)
-            v_start = (x + size * sin_a, y - size * cos_a)
-            v_end = (x - size * sin_a, y + size * cos_a)
-            
-            pygame.draw.line(self.screen, color, h_start, h_end, 3)
-            pygame.draw.line(self.screen, color, v_start, v_end, 3)
-        else:
-            # Standard crosshair
-            pygame.draw.line(self.screen, color, 
-                            (x - size, y), (x + size, y), 3)
-            pygame.draw.line(self.screen, color,
-                            (x, y - size), (x, y + size), 3)
+        # Draw simple crosshair
+        pygame.draw.line(self.screen, color, 
+                        (x - size, y), (x + size, y), 3)
+        pygame.draw.line(self.screen, color,
+                        (x, y - size), (x, y + size), 3)
         
         # Center dot
         pygame.draw.circle(self.screen, color, (x, y), 5)
@@ -326,15 +289,15 @@ class SimplifiedEMGDemo:
         
     def draw_control_display(self):
         """Draw real-time control input visualization"""
-        throttle, yaw, pitch, roll = self.get_controls()
+        left_right, up_down = self.get_controls()
         
         panel_x = 20
         panel_y = 50
         bar_width = 150
         bar_height = 20
         
-        # Background panel
-        panel_rect = pygame.Rect(panel_x - 10, panel_y - 10, 200, 200)
+        # Background panel (smaller for 2 channels)
+        panel_rect = pygame.Rect(panel_x - 10, panel_y - 10, 200, 120)
         pygame.draw.rect(self.screen, (0, 0, 0, 180), panel_rect)
         pygame.draw.rect(self.screen, self.WHITE, panel_rect, 2)
         
@@ -343,10 +306,8 @@ class SimplifiedEMGDemo:
         self.screen.blit(title, (panel_x, panel_y - 30))
         
         controls = [
-            ("Throttle (↕)", throttle, self.GREEN),
-            ("Yaw (↔)", yaw, self.RED),
-            ("Pitch (⌀)", pitch, self.BLUE),
-            ("Roll (↻)", roll, self.YELLOW)
+            ("Left/Right (↔)", left_right, self.GREEN),
+            ("Up/Down (↕)", up_down, self.RED)
         ]
         
         for i, (name, value, color) in enumerate(controls):
@@ -429,8 +390,8 @@ class SimplifiedEMGDemo:
         # Instructions
         instructions = [
             "Hardware: BioAmp EXG Pill + Arduino Uno R4 | EMG Signal → Crosshair Movement",
-            "EMG Mapping: Flexor→Up | Extensor→Down | Yaw→Left/Right | Pitch→Size | Roll→Rotation",
-            "Keyboard Fallback: WASD=Movement | Space=Up | QE=Roll | R=Reset | ESC=Exit"
+            "EMG Mapping: Flexor→Left/Right | Extensor→Up/Down",
+            "Keyboard Fallback: WASD=Movement | R=Reset | ESC=Exit"
         ]
         
         for i, instruction in enumerate(instructions):
@@ -442,14 +403,14 @@ class SimplifiedEMGDemo:
         """Log research data"""
         if hasattr(self, 'log_file'):
             timestamp = time.time() - self.start_time
-            throttle, yaw, pitch, roll = self.get_controls()
+            left_right, up_down = self.get_controls()
             
             writer = csv.writer(self.log_file)
             writer.writerow([
                 timestamp, 
-                self.raw_emg[0], self.raw_emg[1], self.raw_emg[2], self.raw_emg[3],
-                throttle, yaw, pitch, roll,
-                self.crosshair_x, self.crosshair_y, self.crosshair_rotation,
+                self.raw_emg[0], self.raw_emg[1],
+                left_right, up_down,
+                self.crosshair_x, self.crosshair_y,
                 self.signal_quality, self.acquisition_rate
             ])
             self.log_file.flush()
@@ -479,8 +440,6 @@ class SimplifiedEMGDemo:
                         # Reset crosshair position
                         self.crosshair_x = self.WIDTH // 2
                         self.crosshair_y = self.HEIGHT // 2
-                        self.crosshair_rotation = 0.0
-                        self.crosshair_size = 20
 
             # Update crosshair position
             self.update_crosshair_position()
