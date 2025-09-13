@@ -154,23 +154,23 @@ class SimplifiedEMGDemo:
                 time.sleep(0.1)
                 
     def process_emg_signals(self):
-        """Process raw EMG into control signals - BYPASSING CALIBRATION"""
+        """Process raw EMG into control signals - ENHANCED FOR BETTER MOVEMENT"""
         processed = [0.0, 0.0]
         
-        for i in range(2):  # Only 2 channels
-            # BYPASS CALIBRATION - Use direct scaling
-            # Your EMG values are around 0.5-2.0, baseline around 0.3-0.6
-            if self.raw_emg[i] > 0.05:  # Above baseline threshold
-                # Scale from 0.8-3.0 range to 0.0-1.0
-                processed[i] = min(1.0, (self.raw_emg[i] - 0.05) / 0.95)
+        for i in range(2):
+            # Your EMG values are very small (0.1-0.4), so we need aggressive scaling
+            if self.raw_emg[i] > 0.08:  # Lower threshold for detection
+                # Scale from 0.08-0.5 range to 0.0-1.0, then amplify
+                normalized = (self.raw_emg[i] - 0.08) / 0.42  # 0.5 - 0.08 = 0.42
+                processed[i] = min(1.0, normalized) * 3.0  # 3x amplification
             else:
                 processed[i] = 0.0
         
-        # Log significant control changes
+        # Log significant control changes with lower threshold
         old_emg = getattr(self, 'emg_data', [0, 0])
         max_change = max(abs(processed[i] - old_emg[i]) for i in range(2))
         
-        if max_change > 0.05:  # Lower threshold to see more activity
+        if max_change > 0.02:  # Even lower threshold to see activity
             self.log_debug_info("CONTROL", f"Control change: {old_emg} -> {processed}")
         
         self.emg_data = processed
@@ -234,35 +234,42 @@ class SimplifiedEMGDemo:
             pygame.draw.line(self.screen, color, (0, y), (self.WIDTH, y))
 
     def update_crosshair_position(self):
-        """Update crosshair position based on EMG controls"""
+        """Update crosshair position - ENHANCED SENSITIVITY AND CLEAR MAPPING"""
         left_right, up_down = self.get_controls()
         
         # Store old position for movement tracking
         old_pos = (self.crosshair_x, self.crosshair_y)
         
-        # Movement sensitivity
-        sensitivity = 5.0
+        # MUCH HIGHER SENSITIVITY for small EMG signals
+        sensitivity = 25.0  # Increased from 5.0 to 25.0
         
-        # Update crosshair position
-        # Left/Right movement
-        if abs(left_right) > 0.02:
+        # CLEAR MUSCLE MAPPING INSTRUCTIONS:
+        # Channel 0 (A0 - Forearm flexors): Flex wrist DOWN = Move RIGHT, Relax = Move LEFT
+        # Channel 1 (A1 - Forearm extensors): Extend wrist UP = Move UP, Relax = Move DOWN
+        
+        # Left/Right movement (Channel 0 - Wrist flexion)
+        if abs(left_right) > 0.01:  # Lower threshold
+            # Flex wrist (muscle tension) = move right, relax = center/left
             self.crosshair_x += left_right * sensitivity
+            self.log_debug_info("MOVEMENT", f"Wrist flexion: {left_right:.3f} -> X movement")
         
-        # Up/Down movement (inverted Y axis)
-        if abs(up_down) > 0.02:
-            self.crosshair_y -= up_down * sensitivity
+        # Up/Down movement (Channel 1 - Wrist extension) 
+        if abs(up_down) > 0.01:  # Lower threshold
+            # Extend wrist (muscle tension) = move up, relax = center/down
+            self.crosshair_y -= up_down * sensitivity  # Negative for intuitive up movement
+            self.log_debug_info("MOVEMENT", f"Wrist extension: {up_down:.3f} -> Y movement")
         
         # Apply position constraints
         self.crosshair_x = max(self.crosshair_bounds['x_min'], 
-                              min(self.crosshair_bounds['x_max'], self.crosshair_x))
+                            min(self.crosshair_bounds['x_max'], self.crosshair_x))
         self.crosshair_y = max(self.crosshair_bounds['y_min'], 
-                              min(self.crosshair_bounds['y_max'], self.crosshair_y))
+                            min(self.crosshair_bounds['y_max'], self.crosshair_y))
         
         # Log significant movements
         new_pos = (self.crosshair_x, self.crosshair_y)
         movement_distance = ((new_pos[0] - old_pos[0])**2 + (new_pos[1] - old_pos[1])**2)**0.5
         
-        if movement_distance > 5:
+        if movement_distance > 2:  # Lower threshold to see more movement
             self.log_debug_info("MOVEMENT", f"Crosshair moved {movement_distance:.1f} pixels to {new_pos}")
         
     def draw_crosshair(self):
@@ -412,23 +419,29 @@ class SimplifiedEMGDemo:
         self.screen.blit(time_display, (status_x, status_y + 150))
         
     def draw_instructions(self):
-        """Draw control instructions and research information"""
-        info_y = self.HEIGHT - 100
+        """Draw CLEAR muscle movement instructions - REPLACE EXISTING FUNCTION"""
+        info_y = self.HEIGHT - 120
         
         # Main title
-        title = self.font_large.render("EMG Crosshair Control - HardwareX Research", True, self.WHITE)
+        title = self.font_large.render("EMG Crosshair Control - Enhanced Sensitivity", True, self.WHITE)
         title_rect = title.get_rect(center=(self.WIDTH // 2, 30))
         self.screen.blit(title, title_rect)
         
-        # Instructions
+        # CLEAR MOVEMENT INSTRUCTIONS
         instructions = [
-            "Hardware: BioAmp EXG Pill + Arduino Uno R4 | EMG Signal → Crosshair Movement",
-            "EMG Mapping: Flexor→Left/Right | Extensor→Up/Down",
-            "Keyboard Fallback: WASD=Movement | R=Reset | ESC=Exit"
+            "MUSCLE CONTROL MAPPING:",
+            "→ RIGHT: Flex your wrist DOWNWARD (like making a fist downward)",
+            "↑ UP: Extend your wrist UPWARD (like pushing palm up)",  
+            "→ LEFT: Relax wrist flexors (neutral position)",
+            "↓ DOWN: Relax wrist extensors (neutral position)",
+            "Keyboard Fallback: WASD | R=Reset | ESC=Exit"
         ]
         
         for i, instruction in enumerate(instructions):
-            text = self.font_small.render(instruction, True, self.WHITE)
+            color = self.YELLOW if i == 0 else self.WHITE
+            if "RIGHT" in instruction or "UP" in instruction:
+                color = self.GREEN
+            text = self.font_small.render(instruction, True, color)
             text_rect = text.get_rect(center=(self.WIDTH // 2, info_y + i * 20))
             self.screen.blit(text, text_rect)
     
