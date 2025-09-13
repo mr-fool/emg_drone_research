@@ -124,8 +124,10 @@ class SimplifiedEMGDemo:
                     if line.startswith('EMG,'):
                         emg_packet_count += 1
                         parts = line.split(',')
-                        if len(parts) >= 4:  # Only 2 EMG channels now
+                        if len(parts) >= 6:  # Arduino sends timestamp,lr,ud,baseline_lr,baseline_ud
                             self.raw_emg = [float(parts[2]), float(parts[3])]
+                            # Auto-update baseline from Arduino
+                            self.baseline = [float(parts[4]), float(parts[5])]
                             self.last_emg_time = time.time()
                             self.process_emg_signals()
                             
@@ -136,7 +138,7 @@ class SimplifiedEMGDemo:
                             
                     elif line.startswith('QUALITY,'):
                         parts = line.split(',')
-                        if len(parts) >= 4:  # 2 channels + quality
+                        if len(parts) >= 4:
                             self.signal_quality = parts[3]
                             self.log_debug_info("QUALITY", f"Signal quality updated: {self.signal_quality}")
                             
@@ -152,24 +154,24 @@ class SimplifiedEMGDemo:
                 time.sleep(0.1)
                 
     def process_emg_signals(self):
-        """Process raw EMG into control signals with debug logging"""
+        """Process raw EMG into control signals - BYPASSING CALIBRATION"""
         processed = [0.0, 0.0]
         
         for i in range(2):  # Only 2 channels
-            if self.calibrated:
-                baseline_corrected = max(0, self.raw_emg[i] - self.baseline[i])
-                range_val = self.max_values[i] - self.baseline[i]
-                if range_val > 0:
-                    processed[i] = min(1.0, baseline_corrected / range_val)
+            # BYPASS CALIBRATION - Use direct scaling
+            # Your EMG values are around 0.5-2.0, baseline around 0.3-0.6
+            if self.raw_emg[i] > 0.05:  # Above baseline threshold
+                # Scale from 0.8-3.0 range to 0.0-1.0
+                processed[i] = min(1.0, (self.raw_emg[i] - 0.05) / 0.95)
             else:
-                processed[i] = max(0, min(1.0, (self.raw_emg[i] - 20) / 80))
+                processed[i] = 0.0
         
         # Log significant control changes
         old_emg = getattr(self, 'emg_data', [0, 0])
         max_change = max(abs(processed[i] - old_emg[i]) for i in range(2))
         
-        if max_change > 0.2:
-            self.log_debug_info("CONTROL", f"Significant control change: {old_emg} -> {processed}")
+        if max_change > 0.05:  # Lower threshold to see more activity
+            self.log_debug_info("CONTROL", f"Control change: {old_emg} -> {processed}")
         
         self.emg_data = processed
         self.calculate_acquisition_rate()
@@ -195,7 +197,7 @@ class SimplifiedEMGDemo:
         
     def get_controls(self):
         """Get control inputs from EMG or keyboard fallback"""
-        if self.arduino_connected and self.calibrated:
+        if self.arduino_connected:  # Remove calibration requirement
             return self.emg_data[0], self.emg_data[1]
         else:
             # Simplified keyboard fallback - only WASD
@@ -239,15 +241,15 @@ class SimplifiedEMGDemo:
         old_pos = (self.crosshair_x, self.crosshair_y)
         
         # Movement sensitivity
-        sensitivity = 3.0
+        sensitivity = 5.0
         
         # Update crosshair position
         # Left/Right movement
-        if abs(left_right) > 0.05:
+        if abs(left_right) > 0.02:
             self.crosshair_x += left_right * sensitivity
         
         # Up/Down movement (inverted Y axis)
-        if abs(up_down) > 0.05:
+        if abs(up_down) > 0.02:
             self.crosshair_y -= up_down * sensitivity
         
         # Apply position constraints
@@ -349,7 +351,7 @@ class SimplifiedEMGDemo:
             pygame.draw.rect(self.screen, self.GRAY, bar_rect)
             
             # Bar fill
-            if abs(value) > 0.05:
+            if abs(value) > 0.02:
                 fill_width = int(abs(value) * bar_width)
                 fill_x = panel_x + bar_width // 2
                 if value < 0:
@@ -367,7 +369,7 @@ class SimplifiedEMGDemo:
         status_y = 100
         
         # Status panel
-        panel_rect = pygame.Rect(status_x - 10, status_y - 10, 240, 180)
+        panel_rect = pygame.Rect(status_x - 10, status_y - 10, 240, 200)  # Make it taller
         pygame.draw.rect(self.screen, (0, 0, 0, 180), panel_rect)
         pygame.draw.rect(self.screen, self.WHITE, panel_rect, 2)
         
@@ -381,9 +383,9 @@ class SimplifiedEMGDemo:
         conn_display = self.font_small.render(f"Arduino: {conn_text}", True, conn_color)
         self.screen.blit(conn_display, (status_x, status_y))
         
-        # Calibration status
-        cal_color = self.GREEN if self.calibrated else self.YELLOW
-        cal_text = "Calibrated" if self.calibrated else "Calibrating..."
+        # EMG status - BYPASS CALIBRATION CHECK
+        cal_color = self.GREEN if self.arduino_connected else self.YELLOW
+        cal_text = "Active" if self.arduino_connected else "Inactive"
         cal_display = self.font_small.render(f"EMG: {cal_text}", True, cal_color)
         self.screen.blit(cal_display, (status_x, status_y + 25))
         
@@ -392,18 +394,22 @@ class SimplifiedEMGDemo:
         quality_display = self.font_small.render(f"Quality: {self.signal_quality}", True, quality_color)
         self.screen.blit(quality_display, (status_x, status_y + 50))
         
+        # Show raw EMG values for debugging
+        raw_display = self.font_small.render(f"Raw EMG: [{self.raw_emg[0]:.2f}, {self.raw_emg[1]:.2f}]", True, self.WHITE)
+        self.screen.blit(raw_display, (status_x, status_y + 75))
+        
         # Acquisition rate
         rate_display = self.font_small.render(f"Rate: {self.acquisition_rate:.1f} Hz", True, self.WHITE)
-        self.screen.blit(rate_display, (status_x, status_y + 75))
+        self.screen.blit(rate_display, (status_x, status_y + 100))
         
         # Crosshair position
         pos_display = self.font_small.render(f"Position: ({self.crosshair_x:.0f}, {self.crosshair_y:.0f})", True, self.WHITE)
-        self.screen.blit(pos_display, (status_x, status_y + 100))
+        self.screen.blit(pos_display, (status_x, status_y + 125))
         
         # Session time
         session_time = time.time() - self.start_time
         time_display = self.font_small.render(f"Time: {session_time:.1f}s", True, self.WHITE)
-        self.screen.blit(time_display, (status_x, status_y + 125))
+        self.screen.blit(time_display, (status_x, status_y + 150))
         
     def draw_instructions(self):
         """Draw control instructions and research information"""

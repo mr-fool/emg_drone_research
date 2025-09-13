@@ -1,25 +1,25 @@
-// EMG-Controlled Crosshair Control System - SIMPLIFIED 2-CHANNEL VERSION
-// BioAmp EXG Pill - 2 Channel EMG Acquisition with Research-Grade Processing
-// For HardwareX Research Paper - Enhanced Signal Processing & Quality Monitoring
+// EMG-Controlled Crosshair Control System - ENHANCED GAIN VERSION
+// BioAmp EXG Pill - 2 Channel EMG with AGGRESSIVE AMPLIFICATION
+// For HardwareX Research Paper - Enhanced for Low-Level Signals
 // 
 // Hardware: Arduino Uno R4 + BioAmp EXG Pill
 // Single Arm EMG Sensor Configuration:
 // A0: Forearm flexor muscles (wrist flexion) -> Left/Right
 // A1: Forearm extensor muscles (wrist extension) -> Up/Down
-// Output: Enhanced EMG signals with quality metrics for crosshair control
 
 #define SAMPLE_RATE 500
 #define BAUD_RATE 115200
 #define INPUT_PIN_LEFT_RIGHT A0   // Forearm flexor (wrist flexion)
 #define INPUT_PIN_UP_DOWN A1      // Forearm extensor (wrist extension)
-#define BUFFER_SIZE 128
-#define MIN_SNR 3.0               // Minimum signal-to-noise ratio
-#define CALIBRATION_SAMPLES 1000
-#define QUALITY_CHECK_INTERVAL 1000  // ms
+#define BUFFER_SIZE 64            // Smaller buffer for faster response
+#define MIN_SNR 2.0               // Lower minimum SNR for sensitivity
+#define CALIBRATION_SAMPLES 500   // Faster calibration
+#define QUALITY_CHECK_INTERVAL 1000
 
-// Adaptive thresholding parameters
-#define BASELINE_ALPHA 0.95       // Baseline adaptation rate
-#define DYNAMIC_THRESHOLD_MULTIPLIER 2.5
+// ENHANCED AMPLIFICATION PARAMETERS
+#define BASELINE_ALPHA 0.98       // Slower baseline adaptation for stability
+#define DYNAMIC_THRESHOLD_MULTIPLIER 1.5  // Lower threshold for easier activation
+#define SIGNAL_AMPLIFICATION 50.0 // MASSIVE amplification for small signals
 
 // Circular buffers for envelope detection
 int left_right_buffer[BUFFER_SIZE];
@@ -60,8 +60,8 @@ void setup() {
   }
   
   // Startup message
-  Serial.println("EMG Crosshair Control System - SIMPLIFIED 2-CHANNEL VERSION");
-  Serial.println("Single Arm Configuration - 2 Channel EMG with Quality Monitoring");
+  Serial.println("EMG Crosshair Control System - ENHANCED GAIN VERSION");
+  Serial.println("High Sensitivity 2-Channel EMG for Small Signals");
   Serial.println("Starting calibration phase - please relax arm muscles...");
   delay(2000);
 }
@@ -85,17 +85,17 @@ void loop() {
     int left_right_raw = analogRead(INPUT_PIN_LEFT_RIGHT);
     int up_down_raw = analogRead(INPUT_PIN_UP_DOWN);
 
-    // Apply muscle-specific EMG filtering
+    // Apply enhanced EMG filtering
     float left_right_filtered = EMGFilter_LeftRight(left_right_raw);
     float up_down_filtered = EMGFilter_UpDown(up_down_raw);
 
-    // Get envelope (signal strength)
+    // Get envelope with aggressive amplification
     float left_right_envelope = getLeftRightEnvelope(abs(left_right_filtered));
     float up_down_envelope = getUpDownEnvelope(abs(up_down_filtered));
 
-    // Amplify signals
-    left_right_envelope *= 10;
-    up_down_envelope *= 10;
+    // MASSIVE AMPLIFICATION for small signals
+    left_right_envelope *= SIGNAL_AMPLIFICATION;
+    up_down_envelope *= SIGNAL_AMPLIFICATION;
 
     // Handle calibration phase
     if (!is_calibrated) {
@@ -106,11 +106,15 @@ void loop() {
     // Update adaptive baselines
     updateBaselines(left_right_envelope, up_down_envelope);
 
-    // Apply adaptive thresholding
+    // Apply adaptive thresholding with lower threshold
     float left_right_output = applyAdaptiveThreshold(left_right_envelope, baseline_left_right);
     float up_down_output = applyAdaptiveThreshold(up_down_envelope, baseline_up_down);
 
-    // Update peak tracking for fatigue detection
+    // Additional gain boost for output
+    left_right_output *= 2.0;
+    up_down_output *= 2.0;
+
+    // Update peak tracking
     updatePeakTracking(left_right_output, up_down_output);
 
     // Periodic signal quality check
@@ -119,8 +123,8 @@ void loop() {
       last_quality_check = millis();
     }
 
-    // Send enhanced research data
-    sendResearchData(left_right_output, up_down_output);
+    // Send enhanced data with clear movement indicators
+    sendEnhancedData(left_right_output, up_down_output);
   }
 }
 
@@ -138,32 +142,44 @@ void updateCalibration(float lr, float ud) {
     
     is_calibrated = true;
     Serial.println("CALIBRATION_COMPLETE");
-    Serial.print("Baselines: LR=");
+    Serial.print("Enhanced Baselines: LR=");
     Serial.print(baseline_left_right);
     Serial.print(", UD=");
     Serial.println(baseline_up_down);
+    Serial.println("MOVEMENT GUIDE:");
+    Serial.println("- Flex wrist DOWN = Move RIGHT");
+    Serial.println("- Extend wrist UP = Move UP");
+    Serial.println("- Relax = Return to center");
   }
 }
 
 void updateBaselines(float lr, float ud) {
-  // Adaptive baseline tracking (slower adaptation during active use)
+  // Very slow baseline adaptation to prevent drift
   baseline_left_right = BASELINE_ALPHA * baseline_left_right + (1 - BASELINE_ALPHA) * lr;
   baseline_up_down = BASELINE_ALPHA * baseline_up_down + (1 - BASELINE_ALPHA) * ud;
 }
 
 float applyAdaptiveThreshold(float signal, float baseline) {
+  // Lower threshold for easier activation
   float threshold = baseline + (baseline * DYNAMIC_THRESHOLD_MULTIPLIER);
-  return (signal > threshold) ? (signal - baseline) : 0;
+  float output = (signal > threshold) ? (signal - baseline) : 0;
+  
+  // Apply smooth scaling for better control
+  if (output > 0) {
+    output = sqrt(output) * 5.0;  // Square root scaling for smoother control
+  }
+  
+  return output;
 }
 
 void updatePeakTracking(float lr, float ud) {
-  // Track peak values for fatigue detection
-  left_right_peak = max(left_right_peak * 0.999, lr);  // Slow decay
-  up_down_peak = max(up_down_peak * 0.999, ud);
+  // Track peak values with faster decay for responsiveness
+  left_right_peak = max(left_right_peak * 0.995, lr);
+  up_down_peak = max(up_down_peak * 0.995, ud);
 }
 
 void checkSignalQuality() {
-  // Calculate signal-to-noise ratios
+  // Calculate enhanced SNRs
   float snr_left_right = calculateSNR(left_right_peak, baseline_left_right);
   float snr_up_down = calculateSNR(up_down_peak, baseline_up_down);
   
@@ -173,7 +189,7 @@ void checkSignalQuality() {
   Serial.print(",");
   Serial.print(snr_up_down);
   
-  // Quality warnings
+  // Enhanced quality assessment
   if (snr_left_right < MIN_SNR || snr_up_down < MIN_SNR) {
     Serial.print(",LOW_QUALITY");
   } else {
@@ -183,31 +199,39 @@ void checkSignalQuality() {
 }
 
 float calculateSNR(float signal_peak, float noise_baseline) {
-  if (noise_baseline == 0) return 999;  // Avoid division by zero
+  if (noise_baseline == 0) return 999;
   return signal_peak / noise_baseline;
 }
 
-void sendResearchData(float lr, float ud) {
+void sendEnhancedData(float lr, float ud) {
   Serial.print("EMG,");
   Serial.print(millis());              // Timestamp
   Serial.print(",");
-  Serial.print(lr, 2);                 // Left/Right (2 decimal places)
+  Serial.print(lr, 3);                 // Left/Right (3 decimal places for precision)
   Serial.print(",");
-  Serial.print(ud, 2);                 // Up/Down
+  Serial.print(ud, 3);                 // Up/Down
   Serial.print(",");
-  Serial.print(baseline_left_right, 2); // Current baselines for analysis
+  Serial.print(baseline_left_right, 3); // Current baselines
   Serial.print(",");
-  Serial.print(baseline_up_down, 2);
+  Serial.print(baseline_up_down, 3);
   Serial.println();
+  
+  // Debug output for movement detection
+  if (lr > 0.1 || ud > 0.1) {
+    Serial.print("MOVEMENT_DETECTED,LR=");
+    Serial.print(lr);
+    Serial.print(",UD=");
+    Serial.println(ud);
+  }
 }
 
-// Envelope detection functions (optimized)
+// Enhanced envelope detection with smaller buffers for faster response
 float getLeftRightEnvelope(int abs_emg) {
   left_right_sum -= left_right_buffer[left_right_index];
   left_right_sum += abs_emg;
   left_right_buffer[left_right_index] = abs_emg;
   left_right_index = (left_right_index + 1) % BUFFER_SIZE;
-  return (left_right_sum / BUFFER_SIZE) * 2.0;
+  return (left_right_sum / BUFFER_SIZE) * 3.0;  // Extra amplification
 }
 
 float getUpDownEnvelope(int abs_emg) {
@@ -215,12 +239,10 @@ float getUpDownEnvelope(int abs_emg) {
   up_down_sum += abs_emg;
   up_down_buffer[up_down_index] = abs_emg;
   up_down_index = (up_down_index + 1) % BUFFER_SIZE;
-  return (up_down_sum / BUFFER_SIZE) * 2.0;
+  return (up_down_sum / BUFFER_SIZE) * 3.0;  // Extra amplification
 }
 
-// Muscle-Specific Butterworth Filters (Optimized for different muscle groups)
-
-// Left/Right Filter: Optimized for forearm flexors (70-150 Hz)
+// Same EMG filters as before (they're working fine)
 float EMGFilter_LeftRight(float input) {
   float output = input;
   {
@@ -254,7 +276,6 @@ float EMGFilter_LeftRight(float input) {
   return output;
 }
 
-// Up/Down Filter: Optimized for forearm extensors (75-160 Hz)
 float EMGFilter_UpDown(float input) {
   float output = input;
   {
