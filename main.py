@@ -241,20 +241,20 @@ class SimplifiedEMGDemo:
         old_pos = (self.crosshair_x, self.crosshair_y)
         
         # MUCH HIGHER SENSITIVITY for small EMG signals
-        sensitivity = 25.0  # Increased from 5.0 to 25.0
+        sensitivity = 5.0  # Increased from 5.0 to 25.0
         
         # CLEAR MUSCLE MAPPING INSTRUCTIONS:
         # Channel 0 (A0 - Forearm flexors): Flex wrist DOWN = Move RIGHT, Relax = Move LEFT
         # Channel 1 (A1 - Forearm extensors): Extend wrist UP = Move UP, Relax = Move DOWN
         
         # Left/Right movement (Channel 0 - Wrist flexion)
-        if abs(left_right) > 0.01:  # Lower threshold
+        if abs(left_right) > 0.1:  # Lower threshold
             # Flex wrist (muscle tension) = move right, relax = center/left
             self.crosshair_x += left_right * sensitivity
             self.log_debug_info("MOVEMENT", f"Wrist flexion: {left_right:.3f} -> X movement")
         
         # Up/Down movement (Channel 1 - Wrist extension) 
-        if abs(up_down) > 0.01:  # Lower threshold
+        if abs(up_down) > 0.1:  # Lower threshold
             # Extend wrist (muscle tension) = move up, relax = center/down
             self.crosshair_y -= up_down * sensitivity  # Negative for intuitive up movement
             self.log_debug_info("MOVEMENT", f"Wrist extension: {up_down:.3f} -> Y movement")
@@ -429,13 +429,12 @@ class SimplifiedEMGDemo:
         
         # CLEAR MOVEMENT INSTRUCTIONS
         instructions = [
-            "MUSCLE CONTROL MAPPING:",
-            "→ RIGHT: Flex your wrist DOWNWARD (like making a fist downward)",
-            "↑ UP: Extend your wrist UPWARD (like pushing palm up)",  
-            "→ LEFT: Relax wrist flexors (neutral position)",
-            "↓ DOWN: Relax wrist extensors (neutral position)",
-            "Keyboard Fallback: WASD | R=Reset | ESC=Exit"
-        ]
+        "ACTUAL MUSCLE MAPPING: Channel A0 (flexors) = Constant RIGHT movement",
+        "TROUBLESHOOTING: Reduce sensitivity if crosshair drifts constantly",
+        "Current Issue: Only rightward movement detected - check EMG placement",
+        "Controls: WASD=Keyboard | R=Reset | ESC=Exit"
+     ]
+   
         
         for i, instruction in enumerate(instructions):
             color = self.YELLOW if i == 0 else self.WHITE

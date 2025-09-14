@@ -247,7 +247,7 @@ class SimplifiedEMGDemo:
         left_right, up_down = self.get_controls()
         
         old_pos = (self.crosshair_x, self.crosshair_y)
-        sensitivity = 25.0  # Enhanced sensitivity
+        sensitivity = 5.0  # Enhanced sensitivity
         
         # Track movement for research
         if abs(left_right) > 0.01 or abs(up_down) > 0.01:
@@ -256,10 +256,10 @@ class SimplifiedEMGDemo:
             self.research_logger.end_movement(old_pos)
         
         # Update position
-        if abs(left_right) > 0.01:
+        if abs(left_right) > 0.1:
             self.crosshair_x += left_right * sensitivity
         
-        if abs(up_down) > 0.01:
+        if abs(up_down) > 0.1:
             self.crosshair_y -= up_down * sensitivity
         
         # Apply constraints
@@ -363,8 +363,9 @@ class SimplifiedEMGDemo:
         self.screen.blit(title, title_rect)
         
         instructions = [
-            "MUSCLE MAPPING: Flex wrist DOWN→RIGHT | Extend wrist UP→UP",
-            "Research Mode: Movement data being logged for publication",
+            "ACTUAL MUSCLE MAPPING: Channel A0 (flexors) = Constant RIGHT movement",
+            "TROUBLESHOOTING: Reduce sensitivity if crosshair drifts constantly",
+            "Current Issue: Only rightward movement detected - check EMG placement",
             "Controls: WASD=Keyboard | R=Reset | ESC=Exit"
         ]
         
